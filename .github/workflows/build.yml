@@ -45,11 +45,29 @@ jobs:
         run: |
           python3 v1/build_processors.py --autopkg-dir repos/autopkg/autopkg
 
+      - name: Download current release artifacts for comparison
+        working-directory: main
+        env:
+          GH_TOKEN: ${{ secrets.PAT_SECRET }}
+        run: |
+          mkdir -p prev_release
+          gh release download latest --dir prev_release 2>/dev/null || true
+
       - name: Create or update latest release
         working-directory: main
         env:
           GH_TOKEN: ${{ secrets.PAT_SECRET }}
         run: |
+          NEW_INDEX=$(sha256sum v1/index.json | cut -d' ' -f1)
+          NEW_PROC=$(sha256sum v1/processors.json | cut -d' ' -f1)
+          OLD_INDEX=$(sha256sum prev_release/index.json 2>/dev/null | cut -d' ' -f1 || echo "none")
+          OLD_PROC=$(sha256sum prev_release/processors.json 2>/dev/null | cut -d' ' -f1 || echo "none")
+
+          if [ "$NEW_INDEX" = "$OLD_INDEX" ] && [ "$NEW_PROC" = "$OLD_PROC" ]; then
+            echo "No changes detected, skipping release update."
+            exit 0
+          fi
+
           gh release delete latest --yes 2>/dev/null || true
           git push origin :refs/tags/latest 2>/dev/null || true
           gh release create latest \
